@@ -1,1 +1,2 @@
 add_subdirectory(iod_i2c_mpu6050)
+add_subdirectory(iod_i2c_ssd1306)
