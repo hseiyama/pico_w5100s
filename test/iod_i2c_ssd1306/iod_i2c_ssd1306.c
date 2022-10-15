@@ -42,12 +42,12 @@ const uint8_t cau8s_command_initial[] = {
     // 6bit - D/C#(Data/Comman Selection bit) = 0(command) / 1(data),
     // 5-0bit - 000000
     0b10000000, 0xAE, // Set Display Off 0xAE
-    0b00000000, 0xA8, 0b00111111, // Set Multiplex Ratio  0xA8, 0x3F (64MUX)
+    0b00000000, 0xA8, 0b00111111, // Set Multiplex Ratio 0xA8, 0x3F(64MUX)
     0b00000000, 0xD3, 0x00, // Set Display Offset 0xD3, 0x00
     0b10000000, 0x40, // Set Display Start Line 0x40
-    0b10000000, 0xA0, // Set Segment re-map 0xA0/0xA1
-    0b10000000, 0xC0, // Set COM Output Scan Direction 0xC0,/0xC8
-    0b00000000, 0xDA, 0b00010010, // Set COM Pins hardware configuration 0xDA, 0x02
+    0b10000000, 0xA1, // Set Segment re-map 0xA0/0xA1
+    0b10000000, 0xC8, // Set COM Output Scan Direction 0xC0/0xC8
+    0b00000000, 0xDA, 0b00010010, // Set COM Pins hardware configuration 0xDA, 0x12
     0b00000000, 0x81, 255, // Set Contrast Control 0x81, default=0x7F (0-255)
     0b10000000, 0xA4, // Disable Entire Display On
     0b10000000, 0xA6, // Set Normal Display 0xA6, Inverse display 0xA7
