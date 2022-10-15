@@ -1,0 +1,1 @@
+add_subdirectory(iod_i2c_mpu6050)
