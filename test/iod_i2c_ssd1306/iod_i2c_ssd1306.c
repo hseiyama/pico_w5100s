@@ -8,8 +8,8 @@
 #define GPIO_GP11_I2C       (11)
 
 #define I2C1_ID             i2c1
-#define I2C1_SDA_GPIO_GP10  GPIO_GP10_I2C
-#define I2C1_SCL_GPIO_GP11  GPIO_GP11_I2C
+#define I2C1_SDA_GPIO       GPIO_GP10_I2C
+#define I2C1_SCL_GPIO       GPIO_GP11_I2C
 
 // SSD1306 のアドレス
 // Address 7bit: SlaveAddress=0b0111100
@@ -170,10 +170,10 @@ void iod_i2c_ssd1306_init() {
 
     // I2C1の初期設定（クロックは 400KHz）
     i2c_init(I2C1_ID, 400*1000);
-    gpio_set_function(I2C1_SDA_GPIO_GP10, GPIO_FUNC_I2C);
-    gpio_set_function(I2C1_SCL_GPIO_GP11, GPIO_FUNC_I2C);
-    //gpio_pull_up(I2C1_SDA_GPIO_GP10);
-    //gpio_pull_up(I2C1_SCL_GPIO_GP11);
+    gpio_set_function(I2C1_SDA_GPIO, GPIO_FUNC_I2C);
+    gpio_set_function(I2C1_SCL_GPIO, GPIO_FUNC_I2C);
+    //gpio_pull_up(I2C1_SDA_GPIO);
+    //gpio_pull_up(I2C1_SCL_GPIO);
 
     // SSD1306 初期設定
     iod_i2c_ssd1306_write(cau8s_command_initial, sizeof(cau8s_command_initial));
@@ -234,7 +234,7 @@ static void iod_i2c_ssd1306_display_set(uint8_t u8a_row, uint8_t u8a_column, enu
     au8s_tx_buffer[COMMAND_POS_COLUMN_STOP] = (u8a_column + 1) * DISPLAY_CHARACTER_WIDTH - 1;
     iod_i2c_ssd1306_write(au8s_tx_buffer, sizeof(cau8s_command_set_address));
 
-    // 文字の描画
+    // キャラクタの描画
     iod_i2c_ssd1306_write(cau8s_data_character[u8a_character], sizeof(cau8s_data_character[u8a_character]));
 }
 
