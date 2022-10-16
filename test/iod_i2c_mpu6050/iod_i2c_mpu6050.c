@@ -8,8 +8,8 @@
 #define GPIO_GP11_I2C       (11)
 
 #define I2C1_ID             i2c1
-#define I2C1_SDA_GPIO_GP10  GPIO_GP10_I2C
-#define I2C1_SCL_GPIO_GP11  GPIO_GP11_I2C
+#define I2C1_SDA_GPIO       GPIO_GP10_I2C
+#define I2C1_SCL_GPIO       GPIO_GP11_I2C
 
 // MPU-6050 のアドレス
 // Address 7bit: SlaveAddress=0b1101000
@@ -40,17 +40,17 @@
 // 書き込み操作（1バイト書き込み）
 #define MPU6050_WRITE_SIZE  (2)
 
-enum iod_i2c_mpu6050_group {
+enum axis_group {
     ACCEL_X = 0,
     ACCEL_Y,
     ACCEL_Z,
     GYRO_X,
     GYRO_Y,
     GYRO_Z,
-    MPU6050_GROUP_NUM
+    AXIS_GROUP_NUM
 };
 
-static const uint8_t acu8s_mpu6050_address[MPU6050_GROUP_NUM] = {
+static const uint8_t cau8s_axis_address[AXIS_GROUP_NUM] = {
     ACCEL_XOUT_H,
     ACCEL_YOUT_H,
     ACCEL_ZOUT_H,
@@ -59,16 +59,16 @@ static const uint8_t acu8s_mpu6050_address[MPU6050_GROUP_NUM] = {
     GYRO_ZOUT_H,
 };
 
-static int16_t as16s_6axis_value[MPU6050_GROUP_NUM];
+static int16_t as16s_axis_value[AXIS_GROUP_NUM];
 static uint8_t au8s_tx_buffer[32];
 
 // iod_i2c_6axis
-void iod_read_6axis_accel_x_value(int16_t *);
-void iod_read_6axis_accel_y_value(int16_t *);
-void iod_read_6axis_accel_z_value(int16_t *);
-void iod_read_6axis_gyro_x_value(int16_t *);
-void iod_read_6axis_gyro_y_value(int16_t *);
-void iod_read_6axis_gyro_z_value(int16_t *);
+void iod_read_accel_x(int16_t *);
+void iod_read_accel_y(int16_t *);
+void iod_read_accel_z(int16_t *);
+void iod_read_gyro_x(int16_t *);
+void iod_read_gyro_y(int16_t *);
+void iod_read_gyro_z(int16_t *);
 
 // iod_i2c_mpu6050
 extern void iod_i2c_mpu6050_init();
@@ -89,37 +89,37 @@ void main() {
     while (true) {
         iod_i2c_mpu6050_main_in();
         {
-            int16_t s16a_in_6axis_accel_x;
-            int16_t s16a_in_6axis_accel_y;
-            int16_t s16a_in_6axis_accel_z;
-            int16_t s16a_in_6axis_gyro_x;
-            int16_t s16a_in_6axis_gyro_y;
-            int16_t s16a_in_6axis_gyro_z;
+            int16_t s16a_in_accel_x;
+            int16_t s16a_in_accel_y;
+            int16_t s16a_in_accel_z;
+            int16_t s16a_in_gyro_x;
+            int16_t s16a_in_gyro_y;
+            int16_t s16a_in_gyro_z;
 
-            iod_read_6axis_accel_x_value(&s16a_in_6axis_accel_x);
-            iod_read_6axis_accel_y_value(&s16a_in_6axis_accel_y);
-            iod_read_6axis_accel_z_value(&s16a_in_6axis_accel_z);
-            iod_read_6axis_gyro_x_value(&s16a_in_6axis_gyro_x);
-            iod_read_6axis_gyro_y_value(&s16a_in_6axis_gyro_y);
-            iod_read_6axis_gyro_z_value(&s16a_in_6axis_gyro_z);
+            iod_read_accel_x(&s16a_in_accel_x);
+            iod_read_accel_y(&s16a_in_accel_y);
+            iod_read_accel_z(&s16a_in_accel_z);
+            iod_read_gyro_x(&s16a_in_gyro_x);
+            iod_read_gyro_y(&s16a_in_gyro_y);
+            iod_read_gyro_z(&s16a_in_gyro_z);
 
-            printf("accel = %d, %d, %d\n", s16a_in_6axis_accel_x, s16a_in_6axis_accel_y, s16a_in_6axis_accel_z);
-            printf("gyro = %d, %d, %d\r\n", s16a_in_6axis_gyro_x, s16a_in_6axis_gyro_y, s16a_in_6axis_gyro_z);
+            printf("accel = %d, %d, %d\n", s16a_in_accel_x, s16a_in_accel_y, s16a_in_accel_z);
+            printf("gyro = %d, %d, %d\r\n", s16a_in_gyro_x, s16a_in_gyro_y, s16a_in_gyro_z);
         }
         sleep_ms(1000);
     }
 }
 
 void iod_i2c_mpu6050_init() {
-    memset(as16s_6axis_value, 0, sizeof(as16s_6axis_value));
+    memset(as16s_axis_value, 0, sizeof(as16s_axis_value));
     memset(au8s_tx_buffer, 0, sizeof(au8s_tx_buffer));
 
     // I2C1の初期設定（クロックは 400KHz）
     i2c_init(I2C1_ID, 400*1000);
-    gpio_set_function(I2C1_SDA_GPIO_GP10, GPIO_FUNC_I2C);
-    gpio_set_function(I2C1_SCL_GPIO_GP11, GPIO_FUNC_I2C);
-    //gpio_pull_up(I2C1_SDA_GPIO_GP10);
-    //gpio_pull_up(I2C1_SCL_GPIO_GP11);
+    gpio_set_function(I2C1_SDA_GPIO, GPIO_FUNC_I2C);
+    gpio_set_function(I2C1_SCL_GPIO, GPIO_FUNC_I2C);
+    //gpio_pull_up(I2C1_SDA_GPIO);
+    //gpio_pull_up(I2C1_SCL_GPIO);
 
     // MPU-6050設定
     iod_i2c_mpu6050_write(GYRO_CONFIG, 0x18); // FS_SEL=11: 2000 deg/s (full scale range of gyroscopes)
@@ -140,37 +140,37 @@ void iod_i2c_mpu6050_main_in() {
     uint8_t au8a_data[2];
     uint8_t u8a_index;
 
-    for (u8a_index = 0;u8a_index < MPU6050_GROUP_NUM; u8a_index++) {
-        iod_i2c_mpu6050_read(acu8s_mpu6050_address[u8a_index], au8a_data, sizeof(au8a_data));
-        as16s_6axis_value[u8a_index] = (int16_t)((au8a_data[0] << 8) | au8a_data[1]);
+    for (u8a_index = 0;u8a_index < AXIS_GROUP_NUM; u8a_index++) {
+        iod_i2c_mpu6050_read(cau8s_axis_address[u8a_index], au8a_data, sizeof(au8a_data));
+        as16s_axis_value[u8a_index] = (int16_t)((au8a_data[0] << 8) | au8a_data[1]);
     }
 }
 
 void iod_i2c_mpu6050_main_out() {
 }
 
-void iod_read_6axis_accel_x_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[ACCEL_X];
+void iod_read_accel_x(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[ACCEL_X];
 }
 
-void iod_read_6axis_accel_y_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[ACCEL_Y];
+void iod_read_accel_y(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[ACCEL_Y];
 }
 
-void iod_read_6axis_accel_z_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[ACCEL_Z];
+void iod_read_accel_z(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[ACCEL_Z];
 }
 
-void iod_read_6axis_gyro_x_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[GYRO_X];
+void iod_read_gyro_x(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[GYRO_X];
 }
 
-void iod_read_6axis_gyro_y_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[GYRO_Y];
+void iod_read_gyro_y(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[GYRO_Y];
 }
 
-void iod_read_6axis_gyro_z_value(int16_t *ps16a_value) {
-    *ps16a_value = as16s_6axis_value[GYRO_Z];
+void iod_read_gyro_z(int16_t *ps16a_value) {
+    *ps16a_value = as16s_axis_value[GYRO_Z];
 }
 
 // 内部関数

@@ -4,12 +4,12 @@
 #include "hardware/i2c.h"
 
 // iod_main
-#define GPIO_GP10_I2C       (10)
-#define GPIO_GP11_I2C       (11)
+#define GPIO_GP8_I2C        (8)
+#define GPIO_GP9_I2C        (9)
 
-#define I2C1_ID             i2c1
-#define I2C1_SDA_GPIO       GPIO_GP10_I2C
-#define I2C1_SCL_GPIO       GPIO_GP11_I2C
+#define I2C0_ID             i2c0
+#define I2C0_SDA_GPIO       GPIO_GP8_I2C
+#define I2C0_SCL_GPIO       GPIO_GP9_I2C
 
 // SSD1306 のアドレス
 // Address 7bit: SlaveAddress=0b0111100
@@ -27,13 +27,13 @@
 #define COMMAND_POS_COLUMN_START    (4)
 #define COMMAND_POS_COLUMN_STOP     (5)
 
-enum iod_i2c_oled_character_group {
+enum character_group {
     CHARACTER_BLACK = 0,
     CHARACTER_WHITE,
     CHARACTER_GRAY,
     CHARACTER_HALF,
     CHARACTER_SYMBOL,
-    OLED_CHARACTER_GROUP_NUM
+    CHARACTER_GROUP_NUM
 };
 
 const uint8_t cau8s_command_initial[] = {
@@ -64,7 +64,7 @@ uint8_t cau8s_command_set_address[] = {
     0b00000000, 0x21, 0, 127 // Set Column Address (Column Start Address(0-127), Column Stop Address(0-127))
 };
 
-const uint8_t cau8s_data_character[OLED_CHARACTER_GROUP_NUM][9] = {
+const uint8_t cau8s_data_character[CHARACTER_GROUP_NUM][9] = {
     { // CHARACTER_BLACK
         0b01000000, // Control byte, Co bit = 0(continue), D/C# = 1(data)
         // Data byte
@@ -130,7 +130,7 @@ const uint8_t cau8s_data_character[OLED_CHARACTER_GROUP_NUM][9] = {
 static uint8_t au8s_tx_buffer[32];
 static uint8_t u8s_row;
 static uint8_t u8s_column;
-enum iod_i2c_oled_character_group u8s_character;
+enum character_group u8s_character;
 
 // iod_i2c_ssd1306
 extern void iod_i2c_ssd1306_init();
@@ -141,7 +141,7 @@ extern void iod_i2c_ssd1306_main_in();
 extern void iod_i2c_ssd1306_main_out();
 
 static void iod_i2c_ssd1306_display_clear();
-static void iod_i2c_ssd1306_display_set(uint8_t, uint8_t, enum iod_i2c_oled_character_group);
+static void iod_i2c_ssd1306_display_set(uint8_t, uint8_t, enum character_group);
 static void iod_i2c_ssd1306_write(const uint8_t *, uint8_t);
 
 // 外部公開関数
@@ -157,7 +157,7 @@ void main() {
             printf("pass. (%d)\n", u8a_count);
         }
         iod_i2c_ssd1306_main_out();
-        sleep_ms(500);
+        sleep_ms(250);
         u8a_count++;
     }
 }
@@ -169,11 +169,11 @@ void iod_i2c_ssd1306_init() {
     u8s_character = CHARACTER_WHITE;
 
     // I2C1の初期設定（クロックは 400KHz）
-    i2c_init(I2C1_ID, 400*1000);
-    gpio_set_function(I2C1_SDA_GPIO, GPIO_FUNC_I2C);
-    gpio_set_function(I2C1_SCL_GPIO, GPIO_FUNC_I2C);
-    //gpio_pull_up(I2C1_SDA_GPIO);
-    //gpio_pull_up(I2C1_SCL_GPIO);
+    i2c_init(I2C0_ID, 400*1000);
+    gpio_set_function(I2C0_SDA_GPIO, GPIO_FUNC_I2C);
+    gpio_set_function(I2C0_SCL_GPIO, GPIO_FUNC_I2C);
+    //gpio_pull_up(I2C0_SDA_GPIO);
+    //gpio_pull_up(I2C0_SCL_GPIO);
 
     // SSD1306 初期設定
     iod_i2c_ssd1306_write(cau8s_command_initial, sizeof(cau8s_command_initial));
@@ -201,7 +201,7 @@ void iod_i2c_ssd1306_main_out() {
         u8s_row++;
         if (u8s_row >= DISPLAY_HEIGHT_BLOCK_NUM) {
             u8s_character++;
-            u8s_character = (u8s_character < OLED_CHARACTER_GROUP_NUM) ? u8s_character : CHARACTER_BLACK;
+            u8s_character = (u8s_character < CHARACTER_GROUP_NUM) ? u8s_character : CHARACTER_BLACK;
             u8s_row = 0;
         }
         u8s_column = 0;
@@ -226,7 +226,7 @@ static void iod_i2c_ssd1306_display_clear() {
     }
 }
 
-static void iod_i2c_ssd1306_display_set(uint8_t u8a_row, uint8_t u8a_column, enum iod_i2c_oled_character_group u8a_character) {
+static void iod_i2c_ssd1306_display_set(uint8_t u8a_row, uint8_t u8a_column, enum character_group u8a_character) {
     // ページと列範囲のアドレス指定
     memcpy(au8s_tx_buffer, cau8s_command_set_address, sizeof(cau8s_command_set_address));
     au8s_tx_buffer[COMMAND_POS_PAGE] |= u8a_row;
@@ -240,5 +240,5 @@ static void iod_i2c_ssd1306_display_set(uint8_t u8a_row, uint8_t u8a_column, enu
 
 static void iod_i2c_ssd1306_write(const uint8_t *pu8a_buffer, uint8_t u8a_size) {
     // 書き込み操作
-    i2c_write_blocking(I2C1_ID, SSD1306_ADDRESS, pu8a_buffer, u8a_size, false);
+    i2c_write_blocking(I2C0_ID, SSD1306_ADDRESS, pu8a_buffer, u8a_size, false);
 }
