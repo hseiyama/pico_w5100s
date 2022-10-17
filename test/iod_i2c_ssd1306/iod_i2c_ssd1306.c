@@ -168,15 +168,17 @@ void iod_i2c_ssd1306_init() {
     u8s_column = 0;
     u8s_character = CHARACTER_WHITE;
 
-    // I2C1の初期設定（クロックは 400KHz）
+    // I2C0の初期設定（クロックは 400KHz）
     i2c_init(I2C0_ID, 400*1000);
     gpio_set_function(I2C0_SDA_GPIO, GPIO_FUNC_I2C);
     gpio_set_function(I2C0_SCL_GPIO, GPIO_FUNC_I2C);
     //gpio_pull_up(I2C0_SDA_GPIO);
     //gpio_pull_up(I2C0_SCL_GPIO);
+    sleep_ms(100); // SSD1306 待ち時間 100ms
 
     // SSD1306 初期設定
     iod_i2c_ssd1306_write(cau8s_command_initial, sizeof(cau8s_command_initial));
+    sleep_ms(10); // SSD1306 待ち時間 10ms
     // 画面のクリア
     iod_i2c_ssd1306_display_clear();
 }

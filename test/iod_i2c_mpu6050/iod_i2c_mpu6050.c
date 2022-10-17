@@ -61,6 +61,11 @@ static const uint8_t cau8s_axis_address[AXIS_GROUP_NUM] = {
 
 static int16_t as16s_axis_value[AXIS_GROUP_NUM];
 static uint8_t au8s_tx_buffer[32];
+// キャリブレーション用
+static int16_t as16s_axis_offset[AXIS_GROUP_NUM];
+static int16_t as16s_calibrate_sum[AXIS_GROUP_NUM];
+static bool bla_calibrate_flag;
+static uint8_t u8a_calibrate_count;
 
 // iod_i2c_6axis
 void iod_read_accel_x(int16_t *);
@@ -78,6 +83,8 @@ extern void iod_i2c_mpu6050_main_1ms();
 extern void iod_i2c_mpu6050_main_in();
 extern void iod_i2c_mpu6050_main_out();
 
+static void iod_i2c_mpu6050_calibrate_init();
+static void iod_i2c_mpu6050_calibrate_run();
 static void iod_i2c_mpu6050_read(uint8_t, uint8_t *, uint8_t);
 static void iod_i2c_mpu6050_write(uint8_t, uint8_t);
 
@@ -113,6 +120,10 @@ void main() {
 void iod_i2c_mpu6050_init() {
     memset(as16s_axis_value, 0, sizeof(as16s_axis_value));
     memset(au8s_tx_buffer, 0, sizeof(au8s_tx_buffer));
+    // キャリブレーション用
+    memset(as16s_axis_offset, 0, sizeof(as16s_axis_offset));
+    bla_calibrate_flag = true;
+    iod_i2c_mpu6050_calibrate_init();
 
     // I2C1の初期設定（クロックは 400KHz）
     i2c_init(I2C1_ID, 400*1000);
@@ -120,8 +131,9 @@ void iod_i2c_mpu6050_init() {
     gpio_set_function(I2C1_SCL_GPIO, GPIO_FUNC_I2C);
     //gpio_pull_up(I2C1_SDA_GPIO);
     //gpio_pull_up(I2C1_SCL_GPIO);
+    sleep_ms(30); // MPU-6050 待ち時間 30ms
 
-    // MPU-6050設定
+    // MPU-6050 設定
     iod_i2c_mpu6050_write(GYRO_CONFIG, 0x18); // FS_SEL=11: 2000 deg/s (full scale range of gyroscopes)
     iod_i2c_mpu6050_write(ACCEL_CONFIG, 0x18); // AFS_SEL=11: 16 g (full scale range of accelerometers)
     iod_i2c_mpu6050_write(PWR_MGMT_1, 0x00); // SLEEP=0: non sleep mode
@@ -140,9 +152,13 @@ void iod_i2c_mpu6050_main_in() {
     uint8_t au8a_data[2];
     uint8_t u8a_index;
 
-    for (u8a_index = 0;u8a_index < AXIS_GROUP_NUM; u8a_index++) {
-        iod_i2c_mpu6050_read(cau8s_axis_address[u8a_index], au8a_data, sizeof(au8a_data));
-        as16s_axis_value[u8a_index] = (int16_t)((au8a_data[0] << 8) | au8a_data[1]);
+    if (bla_calibrate_flag) {
+        iod_i2c_mpu6050_calibrate_run();
+    } else {
+        for (u8a_index = 0;u8a_index < AXIS_GROUP_NUM; u8a_index++) {
+            iod_i2c_mpu6050_read(cau8s_axis_address[u8a_index], au8a_data, sizeof(au8a_data));
+            as16s_axis_value[u8a_index] = (int16_t)((au8a_data[0] << 8) | au8a_data[1]) - as16s_axis_offset[u8a_index];
+        }
     }
 }
 
@@ -174,6 +190,32 @@ void iod_read_gyro_z(int16_t *ps16a_value) {
 }
 
 // 内部関数
+static void iod_i2c_mpu6050_calibrate_init() {
+    memset(as16s_calibrate_sum, 0, sizeof(as16s_calibrate_sum));
+    u8a_calibrate_count = 0;
+}
+
+static void iod_i2c_mpu6050_calibrate_run() {
+    uint8_t au8a_data[2];
+    uint8_t u8a_index;
+
+    for (u8a_index = 0;u8a_index < AXIS_GROUP_NUM; u8a_index++) {
+        iod_i2c_mpu6050_read(cau8s_axis_address[u8a_index], au8a_data, sizeof(au8a_data));
+        as16s_calibrate_sum[u8a_index] += (int16_t)((au8a_data[0] << 8) | au8a_data[1]);
+    }
+    u8a_calibrate_count++;
+    // オフセット値を設定
+    if (u8a_calibrate_count >= 10) {
+        for (u8a_index = 0;u8a_index < AXIS_GROUP_NUM; u8a_index++) {
+            if (u8a_index != ACCEL_Z) { // Z軸の加速度は除く
+                as16s_axis_offset[u8a_index] = as16s_calibrate_sum[u8a_index] / u8a_calibrate_count;
+            }
+        }
+        iod_i2c_mpu6050_calibrate_init();
+        bla_calibrate_flag = false;
+    }
+}
+
 static void iod_i2c_mpu6050_read(uint8_t u8a_address, uint8_t *pu8a_buffer, uint8_t u8a_size) {
     // 読み出し操作コマンド（複数バイト読み出し）
     au8s_tx_buffer[0] = u8a_address;
