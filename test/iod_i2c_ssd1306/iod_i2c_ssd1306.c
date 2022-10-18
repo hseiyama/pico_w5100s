@@ -48,7 +48,7 @@ const uint8_t cau8s_command_initial[] = {
     0b10000000, 0xA1, // Set Segment re-map 0xA0/0xA1
     0b10000000, 0xC8, // Set COM Output Scan Direction 0xC0/0xC8
     0b00000000, 0xDA, 0b00010010, // Set COM Pins hardware configuration 0xDA, 0x12
-    0b00000000, 0x81, 255, // Set Contrast Control 0x81, default=0x7F (0-255)
+    0b00000000, 0x81, 255, // Set Contrast Control 0x81, default=0x7F(0-255)
     0b10000000, 0xA4, // Disable Entire Display On
     0b10000000, 0xA6, // Set Normal Display 0xA6, Inverse display 0xA7
     0b00000000, 0xD5, 0b10000000, // Set Display Clock Divide Ratio/Oscillator Frequency 0xD5, 0x80
