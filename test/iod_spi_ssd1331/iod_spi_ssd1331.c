@@ -254,7 +254,7 @@ static void iod_spi_ssd1331_draw_pixcel_65k_color(uint8_t u8a_x, uint8_t u8a_y, 
     iod_spi_ssd1331_set_pixcel(u8a_x, u8a_y);
     // 操作データ
     au8s_tx_buffer[0] = ((u8a_color_r & 0x1F) << 3) | ((u8a_color_g & 0x38) >> 3);
-    au8s_tx_buffer[0] = ((u8a_color_g & 0x07) << 5) | (u8a_color_b & 0x1F);
+    au8s_tx_buffer[1] = ((u8a_color_g & 0x07) << 5) | (u8a_color_b & 0x1F);
     // データ書き込み操作
     iod_spi_ssd1331_write_data(au8s_tx_buffer, 2);
 }
