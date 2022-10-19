@@ -44,6 +44,14 @@ const uint8_t cau8s_command_initial[] = {
     0xAF // Set Display On
 };
 
+const uint8_t cau8s_command_color_depth_256[] = {
+    0xA0, 0b00110010, // Remap & Color Depth setting, A[7:6]=00(256 color) 01(65k color format)
+};
+
+const uint8_t cau8s_command_color_depth_65k[] = {
+    0xA0, 0b01110010, // Remap & Color Depth setting, A[7:6]=00(256 color) 01(65k color format)
+};
+
 static uint8_t au8s_tx_buffer[32];
 
 // iod_spi_ssd1331
@@ -54,6 +62,9 @@ extern void iod_spi_ssd1331_main_1ms();
 extern void iod_spi_ssd1331_main_in();
 extern void iod_spi_ssd1331_main_out();
 
+static void iod_spi_ssd1331_demo(uint16_t);
+static void iod_spi_ssd1331_set_color_depth_256();
+static void iod_spi_ssd1331_set_color_depth_65k();
 static void iod_spi_ssd1331_brightness(uint8_t);
 static void iod_spi_ssd1331_clear_window(uint8_t, uint8_t, uint8_t, uint8_t);
 static void iod_spi_ssd1331_copy(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
@@ -113,32 +124,7 @@ void iod_spi_ssd1331_init() {
     iod_spi_ssd1331_write_command(cau8s_command_initial, sizeof(cau8s_command_initial));
     sleep_ms(100); // ディスプレイONコマンドの後は最低 100ms必要
 
-    uint8_t R = 7, G = 0, B = 0;
-    uint8_t Dot1 = (R << 5) | (G << 2) | B; // //256 color : R (0-7), G (0-7), B (0-3)
-    for(uint8_t j=0; j<64; j++){
-        for(uint8_t i=0; i<96; i++){
-            iod_spi_ssd1331_write_data(&Dot1, 1);
-        }
-    }
-
-    sleep_ms(1000);
-    iod_spi_ssd1331_clear_window(30, 30, 40, 40);
-    sleep_ms(1000);
-    iod_spi_ssd1331_brightness(127);
-    sleep_ms(1000);
-    iod_spi_ssd1331_brightness(255);
-    sleep_ms(1000);
-    iod_spi_ssd1331_copy(25, 25, 45, 45, 50, 25);
-    sleep_ms(1000);
-    iod_spi_ssd1331_draw_pixcel_256_color(5, 5, 7, 7, 3);
-    sleep_ms(1000);
-    iod_spi_ssd1331_draw_pixcel_65k_color(10, 10, 31, 63, 31);
-    sleep_ms(1000);
-    iod_spi_ssd1331_draw_line(0, 63, 63, 0, 31, 63, 31);
-    sleep_ms(1000);
-    iod_spi_ssd1331_draw_rectangle(28, 28, 42, 42, 31, 63, 31);
-    sleep_ms(1000);
-    iod_spi_ssd1331_draw_rectangle_fill(48, 18, 62, 32, 31, 63, 31, 0, 0, 31);
+    iod_spi_ssd1331_clear_window(0, 0, 95, 63);
 }
 
 void iod_spi_ssd1331_deinit() {
@@ -154,9 +140,68 @@ void iod_spi_ssd1331_main_in() {
 }
 
 void iod_spi_ssd1331_main_out() {
+    iod_spi_ssd1331_demo(1000);
 }
 
 // 内部関数
+static void iod_spi_ssd1331_demo(uint16_t u16a_time) {
+    iod_spi_ssd1331_clear_window(0, 0, 95, 63);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle_fill(0, 0, 95, 63, 31, 0, 0, 31, 0, 0);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle_fill(0, 0, 95, 63, 0, 63, 0, 0, 63, 0);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle_fill(0, 0, 95, 63, 0, 0, 31, 0, 0, 31);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle_fill(0, 0, 95, 63, 31, 63, 31, 31, 63, 31);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_brightness(31);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_brightness(255);
+    sleep_ms(u16a_time);
+    for (uint8_t u8a_row = 0; u8a_row < 64; u8a_row++) {
+        for (uint8_t u8a_colomun = 0; u8a_colomun < 96; u8a_colomun++) {
+            iod_spi_ssd1331_draw_pixcel_256_color(u8a_colomun, u8a_row, 7, 0, 0);
+            sleep_ms(1);
+        }
+    }
+    iod_spi_ssd1331_set_color_depth_65k();
+    for (uint8_t u8a_row = 0; u8a_row < 64; u8a_row++) {
+        for (uint8_t u8a_colomun = 0; u8a_colomun < 96; u8a_colomun++) {
+            iod_spi_ssd1331_draw_pixcel_65k_color(u8a_colomun, u8a_row, 0, 63, 0);
+            sleep_ms(1);
+        }
+    }
+    iod_spi_ssd1331_set_color_depth_256();
+    for (uint8_t u8a_row = 0; u8a_row < 64; u8a_row++) {
+        for (uint8_t u8a_colomun = 0; u8a_colomun < 96; u8a_colomun++) {
+            iod_spi_ssd1331_draw_pixcel_256_color(u8a_colomun, u8a_row, 0, 0, 3);
+            sleep_ms(1);
+        }
+    }
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_clear_window(20, 10, 29, 19);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_line(63, 0, 0, 63, 31, 63, 31);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle(5, 5, 14, 14, 31, 0, 0);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_draw_rectangle_fill(10, 20, 19, 29, 31, 63, 31, 0, 63, 0);
+    sleep_ms(u16a_time);
+    iod_spi_ssd1331_copy(0, 0, 31, 31, 48, 16);
+    sleep_ms(2000);
+}
+
+static void iod_spi_ssd1331_set_color_depth_256() {
+    // コマンド書き込み操作
+    iod_spi_ssd1331_write_command(cau8s_command_color_depth_256, sizeof(cau8s_command_color_depth_256));
+}
+
+static void iod_spi_ssd1331_set_color_depth_65k() {
+    // コマンド書き込み操作
+    iod_spi_ssd1331_write_command(cau8s_command_color_depth_65k, sizeof(cau8s_command_color_depth_65k));
+}
+
 static void iod_spi_ssd1331_brightness(uint8_t u8a_brightness) {
     // 操作コマンド
     au8s_tx_buffer[0] = 0x81; // Set Contrast for Color A
