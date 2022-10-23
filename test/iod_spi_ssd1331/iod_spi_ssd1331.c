@@ -19,12 +19,36 @@
 #define SPI1_SCK_GPIO       GPIO_GP14_SPI
 #define SPI1_TX_GPIO        GPIO_GP15_SPI
 
-enum image_group {
+// 65K色の定義（緑の16階調）
+#define CL00 {0b00000000, 0b00000000}
+#define CL01 {0b00000000, 0b10000000}
+#define CL02 {0b00000001, 0b00000000}
+#define CL03 {0b00000001, 0b10000000}
+#define CL04 {0b00000010, 0b00100000}
+#define CL05 {0b00000010, 0b10100000}
+#define CL06 {0b00000011, 0b00100000}
+#define CL07 {0b00000011, 0b10100000}
+#define CL08 {0b00000100, 0b01000000}
+#define CL09 {0b00000100, 0b11000000}
+#define CL0A {0b00000101, 0b01000000}
+#define CL0B {0b00000101, 0b11000000}
+#define CL0C {0b00000110, 0b01100000}
+#define CL0D {0b00000110, 0b11100000}
+#define CL0E {0b00000111, 0b01100000}
+#define CL0F {0b00000111, 0b11100000}
+
+enum image_256_group {
     IMAGE_RED = 0,
     IMAGE_GREEN,
     IMAGE_BLUE,
     IMAGE_WHITE,
-    IMAGE_GROUP_NUM
+    IMAGE_256_GROUP_NUM
+};
+
+enum image_65k_group {
+    IMAGE_PATTERN0 = 0,
+    IMAGE_PATTERN1,
+    IMAGE_65K_GROUP_NUM
 };
 
 const uint8_t cau8s_command_initial[] = {
@@ -60,7 +84,7 @@ const uint8_t cau8s_command_color_depth_65k[] = {
     0xA0, 0b01110010, // Remap & Color Depth setting, A[7:6]=00(256 color) 01(65k color format)
 };
 
-const uint8_t cau8s_data_image[IMAGE_GROUP_NUM][64] = {
+const uint8_t cau8s_data_image_256_color[IMAGE_256_GROUP_NUM][64] = {
     { // IMAGE_RED
         0x00, 0x00, 0xE0, 0xE0, 0xE0, 0xE0, 0x00, 0x00,
         0x00, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0xE0, 0x00,
@@ -103,6 +127,29 @@ const uint8_t cau8s_data_image[IMAGE_GROUP_NUM][64] = {
     }
 };
 
+const uint8_t cau8s_data_image_65k_color[IMAGE_65K_GROUP_NUM][64][2] = {
+    { // IMAGE_PATTERN0
+        CL00, CL01, CL02, CL03, CL04, CL05, CL06, CL07,
+        CL01, CL02, CL03, CL04, CL05, CL06, CL07, CL08,
+        CL02, CL03, CL04, CL05, CL06, CL07, CL08, CL09,
+        CL03, CL04, CL05, CL06, CL07, CL08, CL09, CL0A,
+        CL04, CL05, CL06, CL07, CL08, CL09, CL0A, CL0B,
+        CL05, CL06, CL07, CL08, CL09, CL0A, CL0B, CL0C,
+        CL06, CL07, CL08, CL09, CL0A, CL0B, CL0C, CL0D,
+        CL07, CL08, CL09, CL0A, CL0B, CL0C, CL0D, CL0E
+    },
+    { // IMAGE_PATTERN1
+        CL08, CL09, CL0A, CL0B, CL0C, CL0D, CL0E, CL0F,
+        CL09, CL0A, CL0B, CL0C, CL0D, CL0E, CL0F, CL00,
+        CL0A, CL0B, CL0C, CL0D, CL0E, CL0F, CL00, CL01,
+        CL0B, CL0C, CL0D, CL0E, CL0F, CL00, CL01, CL02,
+        CL0C, CL0D, CL0E, CL0F, CL00, CL01, CL02, CL03,
+        CL0D, CL0E, CL0F, CL00, CL01, CL02, CL03, CL04,
+        CL0E, CL0F, CL00, CL01, CL02, CL03, CL04, CL05,
+        CL0F, CL00, CL01, CL02, CL03, CL04, CL05, CL06
+    }
+};
+
 static uint8_t au8s_tx_buffer[32];
 
 // iod_spi_ssd1331
@@ -122,6 +169,7 @@ static void iod_spi_ssd1331_copy(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, ui
 static void iod_spi_ssd1331_draw_pixcel_256_color(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
 static void iod_spi_ssd1331_draw_pixcel_65k_color(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
 static void iod_spi_ssd1331_draw_image_256_color(uint8_t, uint8_t, uint8_t, uint8_t, const uint8_t *);
+static void iod_spi_ssd1331_draw_image_65k_color(uint8_t, uint8_t, uint8_t, uint8_t, const uint8_t *);
 static void iod_spi_ssd1331_set_frame(uint8_t, uint8_t, uint8_t, uint8_t);
 static void iod_spi_ssd1331_draw_line(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
 static void iod_spi_ssd1331_draw_rectangle(uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
@@ -197,6 +245,8 @@ void iod_spi_ssd1331_main_out() {
 
 // 内部関数
 static void iod_spi_ssd1331_demo(uint16_t u16a_time) {
+    uint8_t u8a_image;
+
     // 全画面を RGBで描画
     iod_spi_ssd1331_draw_rectangle_fill(0, 0, 96, 64, 31, 0, 0, 31, 0, 0);
     sleep_ms(u16a_time);
@@ -212,6 +262,7 @@ static void iod_spi_ssd1331_demo(uint16_t u16a_time) {
     iod_spi_ssd1331_brightness(255);
     sleep_ms(u16a_time);
     // ピクセル単位で全画面を描画（256色指定：赤）
+    iod_spi_ssd1331_set_color_depth_256();
     for (uint8_t u8a_row = 0; u8a_row < 64; u8a_row++) {
         for (uint8_t u8a_colomun = 0; u8a_colomun < 96; u8a_colomun++) {
             iod_spi_ssd1331_draw_pixcel_256_color(u8a_colomun, u8a_row, 7, 0, 0);
@@ -256,12 +307,24 @@ static void iod_spi_ssd1331_demo(uint16_t u16a_time) {
     iod_spi_ssd1331_copy(0, 0, 30, 30, 32, 32);
     sleep_ms(5000);
     // 画像を描画（256色指定）
-    uint8_t u8a_image = IMAGE_RED;
+    u8a_image = IMAGE_RED;
     for (uint8_t u8a_row = 0; u8a_row < 8; u8a_row++) {
         for (uint8_t u8a_colomun = 0; u8a_colomun < 12; u8a_colomun++) {
-            iod_spi_ssd1331_draw_image_256_color(u8a_colomun * 8, u8a_row * 8, 8, 8, cau8s_data_image[u8a_image]);
+            iod_spi_ssd1331_draw_image_256_color(u8a_colomun * 8, u8a_row * 8, 8, 8, cau8s_data_image_256_color[u8a_image]);
             u8a_image++;
-            u8a_image = (u8a_image < IMAGE_GROUP_NUM) ? u8a_image : IMAGE_RED;
+            u8a_image = (u8a_image < IMAGE_256_GROUP_NUM) ? u8a_image : IMAGE_RED;
+            sleep_ms(u16a_time);
+        }
+    }
+    sleep_ms(5000);
+    // 画像を描画（65K色指定）
+    iod_spi_ssd1331_set_color_depth_65k();
+    for (uint8_t u8a_row = 0; u8a_row < 8; u8a_row++) {
+        u8a_image = (enum image_65k_group)(u8a_row % 2);
+        for (uint8_t u8a_colomun = 0; u8a_colomun < 12; u8a_colomun++) {
+            iod_spi_ssd1331_draw_image_65k_color(u8a_colomun * 8, u8a_row * 8, 8, 8, cau8s_data_image_65k_color[u8a_image][0]);
+            u8a_image++;
+            u8a_image = (u8a_image < IMAGE_65K_GROUP_NUM) ? u8a_image : IMAGE_PATTERN0;
             sleep_ms(u16a_time);
         }
     }
@@ -345,6 +408,12 @@ static void iod_spi_ssd1331_draw_image_256_color(uint8_t u8a_x, uint8_t u8a_y, u
     iod_spi_ssd1331_set_frame(u8a_x, u8a_y, u8a_width, u8a_height);
     // データ書き込み操作
     iod_spi_ssd1331_write_data(pu8a_buffer, u8a_width * u8a_height);
+}
+
+static void iod_spi_ssd1331_draw_image_65k_color(uint8_t u8a_x, uint8_t u8a_y, uint8_t u8a_width, uint8_t u8a_height, const uint8_t *pu8a_buffer) {
+    iod_spi_ssd1331_set_frame(u8a_x, u8a_y, u8a_width, u8a_height);
+    // データ書き込み操作
+    iod_spi_ssd1331_write_data(pu8a_buffer, u8a_width * 2 * u8a_height);
 }
 
 static void iod_spi_ssd1331_set_frame(uint8_t u8a_x, uint8_t u8a_y, uint8_t u8a_width, uint8_t u8a_height) {
