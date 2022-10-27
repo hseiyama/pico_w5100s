@@ -131,7 +131,7 @@ static void set_clock_khz(void)
 static void iod_spi_w5100s_state_in() {
     bls_rx_flag = false;
 
-    switch(getSn_SR(u8s_sn)) {
+    switch(getSn_SR(u8s_sn)) { // SOCKET n Status Register
     case SOCK_CLOSED:
         socket(u8s_sn, Sn_MR_TCP, PORT_LOOPBACK, 0x00);
         break;
@@ -141,9 +141,11 @@ static void iod_spi_w5100s_state_in() {
     case SOCK_LISTEN:
         break;
     case SOCK_ESTABLISHED :
-        s32s_rx_size = recv(u8s_sn, au8s_rx_message, sizeof(au8s_rx_message));
-        if (s32s_rx_size > 0) {
-            bls_rx_flag = true;
+        if (getSn_RX_RSR(u8s_sn) > 0) { // SOCKET n RX Received Size Register
+            s32s_rx_size = recv(u8s_sn, au8s_rx_message, sizeof(au8s_rx_message));
+            if (s32s_rx_size > 0) {
+                bls_rx_flag = true;
+            }
         }
         break;
     case SOCK_CLOSE_WAIT :
@@ -155,7 +157,7 @@ static void iod_spi_w5100s_state_in() {
 }
 
 static void iod_spi_w5100s_state_out() {
-    switch(getSn_SR(u8s_sn)) {
+    switch(getSn_SR(u8s_sn)) { // SOCKET n Status Register
     case SOCK_ESTABLISHED :
         if (bls_tx_flag) {
             send(u8s_sn, au8s_tx_message, s32s_tx_size);
