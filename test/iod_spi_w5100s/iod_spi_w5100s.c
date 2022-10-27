@@ -48,7 +48,7 @@ static void iod_spi_w5100s_state_out();
 void main() {
     uint8_t u8a_count = 0;
 
-    stdio_init_all();
+//    stdio_init_all();
     iod_spi_w5100s_init();
 
     while (true) {
@@ -56,7 +56,7 @@ void main() {
         {
             if (bls_rx_flag) {
                 au8s_rx_message[s32s_rx_size] = 0x00;
-                printf("rx_message = %s\n", au8s_rx_message);
+                printf("rx_message = %s", au8s_rx_message);
                 bls_tx_flag = true;
                 s32s_tx_size = sizeof(TX_MESSAGE);
                 memcpy(au8s_tx_message, TX_MESSAGE, s32s_tx_size);
@@ -88,6 +88,8 @@ void iod_spi_w5100s_init() {
     wizchip_check();
     network_initialize(g_net_info);
 
+    //【注意】stdio_init_all()はクロック設定後に実行する
+    stdio_init_all();
     // Get network information
     print_network_information(g_net_info);
     printf("start iod_spi_w5100s\n");
