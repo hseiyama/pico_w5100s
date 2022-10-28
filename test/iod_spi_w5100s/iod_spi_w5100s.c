@@ -5,11 +5,12 @@
 #include "hardware/clocks.h"
 #include "wizchip_conf.h"
 #include "w5x00_spi.h"
+#include "w5x00_gpio_irq.h"
 #include "socket.h"
 
 #define PLL_SYS_KHZ             (133 * 1000) // Clock
-#define ETHERNET_BUF_MAX_SIZE   (1024 * 2) // Buffer
-#define SOCKET_LOOPBACK         (0) // Socket
+#define ETHERNET_BUF_MAX_SIZE   (64) // Buffer
+#define SOCKET_LOOPBACK         (1) // Socket(0-3)
 #define PORT_LOOPBACK           (5000) // Port
 
 #define TX_MESSAGE              "send message.\n"
@@ -25,8 +26,8 @@ static const wiz_NetInfo g_net_info =
 };
 
 static uint8_t u8s_sn;
-static uint8_t au8s_rx_message[64];
-static uint8_t au8s_tx_message[64];
+static uint8_t au8s_rx_message[ETHERNET_BUF_MAX_SIZE];
+static uint8_t au8s_tx_message[ETHERNET_BUF_MAX_SIZE];
 int32_t s32s_rx_size;
 int32_t s32s_tx_size;
 bool bls_rx_flag;
@@ -40,9 +41,10 @@ extern void iod_spi_w5100s_main_1ms();
 extern void iod_spi_w5100s_main_in();
 extern void iod_spi_w5100s_main_out();
 
-static void set_clock_khz(void);
+static void set_clock_khz();
 static void iod_spi_w5100s_state_in();
 static void iod_spi_w5100s_state_out();
+static void iod_spi_w5100s_intr_callback();
 
 // 外部公開関数
 void main() {
@@ -87,6 +89,8 @@ void iod_spi_w5100s_init() {
     wizchip_initialize();
     wizchip_check();
     network_initialize(g_net_info);
+    // 割り込み設定
+    wizchip_gpio_interrupt_initialize(SOCKET_LOOPBACK, iod_spi_w5100s_intr_callback);
 
     //【注意】stdio_init_all()はクロック設定後に実行する
     stdio_init_all();
@@ -113,7 +117,7 @@ void iod_spi_w5100s_main_out() {
 }
 
 // 内部関数
-static void set_clock_khz(void)
+static void set_clock_khz()
 {
     // set a system clock frequency in khz
     set_sys_clock_khz(PLL_SYS_KHZ, true);
@@ -133,7 +137,7 @@ static void iod_spi_w5100s_state_in() {
 
     switch(getSn_SR(u8s_sn)) { // SOCKET n Status Register
     case SOCK_CLOSED:
-        socket(u8s_sn, Sn_MR_TCP, PORT_LOOPBACK, 0x00);
+        u8s_sn = socket(SOCKET_LOOPBACK, Sn_MR_TCP, PORT_LOOPBACK, 0x00);
         break;
     case SOCK_INIT :
         listen(u8s_sn);
@@ -166,5 +170,20 @@ static void iod_spi_w5100s_state_out() {
         break;
     default:
         break;
+    }
+}
+
+static void iod_spi_w5100s_intr_callback() {
+    if(getSn_IR(u8s_sn) & Sn_IR_CON) {
+        setSn_IR(u8s_sn,Sn_IR_CON);
+        printf("CONNECTED Interrupt.\n");
+    } else if (getSn_IR(u8s_sn) & Sn_IR_RECV) {
+        setSn_IR(u8s_sn,Sn_IR_RECV);
+        printf("RECEIVED Interrupt.\n");
+    } else if (getSn_IR(u8s_sn) & Sn_IR_DISCON) {
+        setSn_IR(u8s_sn,Sn_IR_DISCON);
+        printf("DISCONNECTED Interrupt.\n");
+    } else {
+        printf("Other Interrupt.\n");
     }
 }
