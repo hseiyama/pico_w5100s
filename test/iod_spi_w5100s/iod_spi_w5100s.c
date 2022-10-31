@@ -8,12 +8,16 @@
 #include "w5x00_gpio_irq.h"
 #include "socket.h"
 
-#define PLL_SYS_KHZ             (133 * 1000) // Clock
-#define ETHERNET_BUF_MAX_SIZE   (64) // Buffer
-#define SOCKET_LOOPBACK         (1) // Socket(0-3)
-#define PORT_LOOPBACK           (5000) // Port
+#define PLL_SYS_KHZ     (133 * 1000) // Clock
+#define TCP_BUF_SIZE    (64) // Buffer
+#define TCP_SN          (1) // Socket(0-3)
+#define TCP_PORT        (5000) // Port
 
-#define TX_MESSAGE              "send message.\n"
+struct ether_data {
+    uint8_t au8_buffer[TCP_BUF_SIZE];
+    int32_t s32_size;
+    bool bl_flag;
+};
 
 static const wiz_NetInfo g_net_info =
     {
@@ -25,13 +29,9 @@ static const wiz_NetInfo g_net_info =
         .dhcp = NETINFO_STATIC                       // DHCP enable/disable
 };
 
-static uint8_t u8s_sn;
-static uint8_t au8s_rx_message[ETHERNET_BUF_MAX_SIZE];
-static uint8_t au8s_tx_message[ETHERNET_BUF_MAX_SIZE];
-int32_t s32s_rx_size;
-int32_t s32s_tx_size;
-bool bls_rx_flag;
-bool bls_tx_flag;
+static uint8_t u8s_tcp_sn;
+static struct ether_data sts_tcp_rx_data;
+static struct ether_data sts_tcp_tx_data;
 
 // iod_spi_w5100s
 extern void iod_spi_w5100s_init();
@@ -40,14 +40,18 @@ extern void iod_spi_w5100s_reinit();
 extern void iod_spi_w5100s_main_1ms();
 extern void iod_spi_w5100s_main_in();
 extern void iod_spi_w5100s_main_out();
+extern uint32_t iod_spi_w5100s_tcp_recv(uint8_t *, uint32_t);
+extern uint32_t iod_spi_w5100s_tcp_send(uint8_t *, uint32_t);
 
 static void set_clock_khz();
-static void iod_spi_w5100s_state_in();
-static void iod_spi_w5100s_state_out();
-static void iod_spi_w5100s_intr_callback();
+static void iod_spi_w5100s_tcp_in();
+static void iod_spi_w5100s_tcp_out();
+static void iod_spi_w5100s_intr_gpio();
 
 // 外部公開関数
 void main() {
+    uint8_t au8a_tcp_buffer[TCP_BUF_SIZE];
+    uint16_t u16a_tcp_size;
     uint8_t u8a_count = 0;
 
 //    stdio_init_all();
@@ -56,14 +60,11 @@ void main() {
     while (true) {
         iod_spi_w5100s_main_in();
         {
-            if (bls_rx_flag) {
-                au8s_rx_message[s32s_rx_size] = 0x00;
-                printf("rx_message = %s", au8s_rx_message);
-                bls_tx_flag = true;
-                s32s_tx_size = sizeof(TX_MESSAGE);
-                memcpy(au8s_tx_message, TX_MESSAGE, s32s_tx_size);
+            u16a_tcp_size = iod_spi_w5100s_tcp_recv(au8a_tcp_buffer, sizeof(au8a_tcp_buffer));
+            if (u16a_tcp_size > 0) {
+                iod_spi_w5100s_tcp_send(au8a_tcp_buffer, u16a_tcp_size);
             } else {
-                printf("pass. (%d)\n", u8a_count);
+                printf("passed. (%d)\n", u8a_count);
             }
         }
         iod_spi_w5100s_main_out();
@@ -73,13 +74,9 @@ void main() {
 }
 
 void iod_spi_w5100s_init() {
-    memset(au8s_rx_message, 0, sizeof(au8s_rx_message));
-    memset(au8s_tx_message, 0, sizeof(au8s_tx_message));
-    u8s_sn = 0;
-    s32s_rx_size = 0;
-    s32s_tx_size = 0;
-    bls_rx_flag = false;
-    bls_tx_flag = false;
+    memset(&sts_tcp_rx_data, 0, sizeof(sts_tcp_rx_data));
+    memset(&sts_tcp_tx_data, 0, sizeof(sts_tcp_tx_data));
+    u8s_tcp_sn = 0;
 
     // Initialize
     set_clock_khz();
@@ -90,7 +87,7 @@ void iod_spi_w5100s_init() {
     wizchip_check();
     network_initialize(g_net_info);
     // 割り込み設定
-    wizchip_gpio_interrupt_initialize(SOCKET_LOOPBACK, iod_spi_w5100s_intr_callback);
+    wizchip_gpio_interrupt_initialize(TCP_SN, iod_spi_w5100s_intr_gpio);
 
     //【注意】stdio_init_all()はクロック設定後に実行する
     stdio_init_all();
@@ -109,11 +106,29 @@ void iod_spi_w5100s_main_1ms() {
 }
 
 void iod_spi_w5100s_main_in() {
-    iod_spi_w5100s_state_in();
+    iod_spi_w5100s_tcp_in();
 }
 
 void iod_spi_w5100s_main_out() {
-    iod_spi_w5100s_state_out();
+    iod_spi_w5100s_tcp_out();
+}
+
+uint32_t iod_spi_w5100s_tcp_recv(uint8_t *pu8a_buffer, uint32_t u32a_size) {
+    uint32_t u32a_rcode = 0;
+    if (sts_tcp_rx_data.bl_flag) {
+        sts_tcp_rx_data.s32_size = MIN(sts_tcp_rx_data.s32_size, u32a_size);
+        memcpy(pu8a_buffer, sts_tcp_rx_data.au8_buffer, sts_tcp_rx_data.s32_size);
+        u32a_rcode = sts_tcp_rx_data.s32_size;
+    }
+    return u32a_rcode;
+}
+
+uint32_t iod_spi_w5100s_tcp_send(uint8_t *pu8a_buffer, uint32_t u32a_size) {
+    sts_tcp_tx_data.s32_size = MIN(TCP_BUF_SIZE, u32a_size);
+    memcpy(sts_tcp_tx_data.au8_buffer, pu8a_buffer, sts_tcp_tx_data.s32_size);
+    sts_tcp_tx_data.bl_flag = true;
+
+    return sts_tcp_tx_data.s32_size;
 }
 
 // 内部関数
@@ -132,40 +147,40 @@ static void set_clock_khz()
     );
 }
 
-static void iod_spi_w5100s_state_in() {
-    bls_rx_flag = false;
+static void iod_spi_w5100s_tcp_in() {
+    sts_tcp_rx_data.bl_flag = false;
 
-    switch(getSn_SR(u8s_sn)) { // SOCKET n Status Register
+    switch(getSn_SR(u8s_tcp_sn)) { // SOCKET n Status Register
     case SOCK_CLOSED:
-        u8s_sn = socket(SOCKET_LOOPBACK, Sn_MR_TCP, PORT_LOOPBACK, 0x00);
+        u8s_tcp_sn = socket(TCP_SN, Sn_MR_TCP, TCP_PORT, 0x00);
         break;
     case SOCK_INIT :
-        listen(u8s_sn);
+        listen(u8s_tcp_sn);
         break;
     case SOCK_LISTEN:
         break;
     case SOCK_ESTABLISHED :
-        if (getSn_RX_RSR(u8s_sn) > 0) { // SOCKET n RX Received Size Register
-            s32s_rx_size = recv(u8s_sn, au8s_rx_message, sizeof(au8s_rx_message));
-            if (s32s_rx_size > 0) {
-                bls_rx_flag = true;
+        if (getSn_RX_RSR(u8s_tcp_sn) > 0) { // SOCKET n RX Received Size Register
+            sts_tcp_rx_data.s32_size = recv(u8s_tcp_sn, sts_tcp_rx_data.au8_buffer, sizeof(sts_tcp_rx_data.au8_buffer));
+            if (sts_tcp_rx_data.s32_size > 0) {
+                sts_tcp_rx_data.bl_flag = true;
             }
         }
         break;
     case SOCK_CLOSE_WAIT :
-        disconnect(u8s_sn);
+        disconnect(u8s_tcp_sn);
         break;
     default:
         break;
     }
 }
 
-static void iod_spi_w5100s_state_out() {
-    switch(getSn_SR(u8s_sn)) { // SOCKET n Status Register
+static void iod_spi_w5100s_tcp_out() {
+    switch(getSn_SR(u8s_tcp_sn)) { // SOCKET n Status Register
     case SOCK_ESTABLISHED :
-        if (bls_tx_flag) {
-            send(u8s_sn, au8s_tx_message, s32s_tx_size);
-            bls_tx_flag = false;
+        if (sts_tcp_tx_data.bl_flag) {
+            send(u8s_tcp_sn, sts_tcp_tx_data.au8_buffer, sts_tcp_tx_data.s32_size);
+            sts_tcp_tx_data.bl_flag = false;
         }
         break;
     default:
@@ -173,15 +188,15 @@ static void iod_spi_w5100s_state_out() {
     }
 }
 
-static void iod_spi_w5100s_intr_callback() {
-    if(getSn_IR(u8s_sn) & Sn_IR_CON) {
-        setSn_IR(u8s_sn,Sn_IR_CON);
+static void iod_spi_w5100s_intr_gpio() {
+    if(getSn_IR(u8s_tcp_sn) & Sn_IR_CON) {
+        setSn_IR(u8s_tcp_sn,Sn_IR_CON);
         printf("CONNECTED Interrupt.\n");
-    } else if (getSn_IR(u8s_sn) & Sn_IR_RECV) {
-        setSn_IR(u8s_sn,Sn_IR_RECV);
+    } else if (getSn_IR(u8s_tcp_sn) & Sn_IR_RECV) {
+        setSn_IR(u8s_tcp_sn,Sn_IR_RECV);
         printf("RECEIVED Interrupt.\n");
-    } else if (getSn_IR(u8s_sn) & Sn_IR_DISCON) {
-        setSn_IR(u8s_sn,Sn_IR_DISCON);
+    } else if (getSn_IR(u8s_tcp_sn) & Sn_IR_DISCON) {
+        setSn_IR(u8s_tcp_sn,Sn_IR_DISCON);
         printf("DISCONNECTED Interrupt.\n");
     } else {
         printf("Other Interrupt.\n");
