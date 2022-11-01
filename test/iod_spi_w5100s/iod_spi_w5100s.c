@@ -10,10 +10,10 @@
 
 #define PLL_SYS_KHZ     (133 * 1000) // Clock
 #define BUFFER_SIZE     (64) // Buffer
-#define TCP_SN          (1) // Socket(0-3)
+#define TCP_SN          (0) // Socket(0-3)
 #define TCP_PORT        (5000) // Port
-#define UDP_SN          (3) // Socket(0-3)
-#define UDP_PORT        (5002) // Port
+#define UDP_SN          (1) // Socket(0-3)
+#define UDP_PORT        (5000) // Port
 
 struct ether_data {
     uint8_t au8_buffer[BUFFER_SIZE];
@@ -31,14 +31,12 @@ static const wiz_NetInfo csts_net_info =
         .dhcp = NETINFO_STATIC                       // DHCP enable/disable
 };
 
-static uint8_t u8s_tcp_sn;
 static struct ether_data sts_tcp_rx_data;
 static struct ether_data sts_tcp_tx_data;
-static uint8_t u8s_udp_sn;
-static uint8_t au8s_udp_ip[4];
-static uint16_t u16s_udp_port;
 static struct ether_data sts_udp_rx_data;
 static struct ether_data sts_udp_tx_data;
+static uint8_t au8s_udp_ip[4];
+static uint16_t u16s_udp_port;
 
 // iod_spi_w5100s
 extern void iod_spi_w5100s_init();
@@ -53,13 +51,14 @@ extern uint32_t iod_spi_w5100s_udp_recv(uint8_t *, uint32_t);
 extern uint32_t iod_spi_w5100s_udp_send(uint8_t *, uint32_t);
 
 static void iod_spi_w5100s_set_clock();
-static void iod_spi_w5100s_tcp_in();
-static void iod_spi_w5100s_tcp_out();
-static void iod_spi_w5100s_udp_in();
-static void iod_spi_w5100s_udp_out();
-static void iod_spi_w5100s_intr_gpio();
+static void iod_spi_w5100s_tcp_in(uint8_t);
+static void iod_spi_w5100s_tcp_out(uint8_t);
+static void iod_spi_w5100s_udp_in(uint8_t);
+static void iod_spi_w5100s_udp_out(uint8_t);
 static uint32_t iod_spi_w5100s_recv(uint8_t *, uint32_t, struct ether_data *);
 static uint32_t iod_spi_w5100s_send(uint8_t *, uint32_t, struct ether_data *);
+static void iod_spi_w5100s_intr_init();
+static void iod_spi_w5100s_intr_gpio();
 
 // 外部公開関数
 void main() {
@@ -92,11 +91,9 @@ void main() {
 void iod_spi_w5100s_init() {
     memset(&sts_tcp_rx_data, 0, sizeof(sts_tcp_rx_data));
     memset(&sts_tcp_tx_data, 0, sizeof(sts_tcp_tx_data));
-    u8s_tcp_sn = 0;
     memset(&sts_udp_rx_data, 0, sizeof(sts_udp_rx_data));
     memset(&sts_udp_tx_data, 0, sizeof(sts_udp_tx_data));
     memset(&au8s_udp_ip, 0, sizeof(au8s_udp_ip));
-    u8s_udp_sn = 0;
     u16s_udp_port = 0;
 
     // Initialize
@@ -110,8 +107,9 @@ void iod_spi_w5100s_init() {
     // 割り込み設定
     //【注意】wizchip_gpio_interrupt_initialize() の仕様により、
     //        IMR (Interrupt Mask Register)の設定は後勝ちとなる
-    wizchip_gpio_interrupt_initialize(TCP_SN, iod_spi_w5100s_intr_gpio);
+//    wizchip_gpio_interrupt_initialize(TCP_SN, iod_spi_w5100s_intr_gpio);
 //    wizchip_gpio_interrupt_initialize(UDP_SN, iod_spi_w5100s_intr_gpio);
+    iod_spi_w5100s_intr_init();
 
     //【注意】stdio_init_all()はクロック設定後に実行する
     stdio_init_all();
@@ -130,13 +128,13 @@ void iod_spi_w5100s_main_1ms() {
 }
 
 void iod_spi_w5100s_main_in() {
-    iod_spi_w5100s_tcp_in();
-    iod_spi_w5100s_udp_in();
+    iod_spi_w5100s_tcp_in(TCP_SN);
+    iod_spi_w5100s_udp_in(UDP_SN);
 }
 
 void iod_spi_w5100s_main_out() {
-    iod_spi_w5100s_tcp_out();
-    iod_spi_w5100s_udp_out();
+    iod_spi_w5100s_tcp_out(TCP_SN);
+    iod_spi_w5100s_udp_out(UDP_SN);
 }
 
 uint32_t iod_spi_w5100s_tcp_recv(uint8_t *pu8a_buffer, uint32_t u32a_size) {
@@ -171,39 +169,39 @@ static void iod_spi_w5100s_set_clock()
     );
 }
 
-static void iod_spi_w5100s_tcp_in() {
+static void iod_spi_w5100s_tcp_in(uint8_t u8a_sn) {
     sts_tcp_rx_data.bl_flag = false;
 
-    switch(getSn_SR(u8s_tcp_sn)) { // SOCKET n Status Register
+    switch(getSn_SR(u8a_sn)) { // SOCKET n Status Register
     case SOCK_CLOSED:
-        u8s_tcp_sn = socket(TCP_SN, Sn_MR_TCP, TCP_PORT, 0x00);
+        socket(u8a_sn, Sn_MR_TCP, TCP_PORT, 0x00);
         break;
     case SOCK_INIT :
-        listen(u8s_tcp_sn);
+        listen(u8a_sn);
         break;
     case SOCK_LISTEN:
         break;
     case SOCK_ESTABLISHED :
-        if (getSn_RX_RSR(u8s_tcp_sn) > 0) { // SOCKET n RX Received Size Register
-            sts_tcp_rx_data.s32_size = recv(u8s_tcp_sn, sts_tcp_rx_data.au8_buffer, sizeof(sts_tcp_rx_data.au8_buffer));
+        if (getSn_RX_RSR(u8a_sn) > 0) { // SOCKET n RX Received Size Register
+            sts_tcp_rx_data.s32_size = recv(u8a_sn, sts_tcp_rx_data.au8_buffer, sizeof(sts_tcp_rx_data.au8_buffer));
             if (sts_tcp_rx_data.s32_size > 0) {
                 sts_tcp_rx_data.bl_flag = true;
             }
         }
         break;
     case SOCK_CLOSE_WAIT :
-        disconnect(u8s_tcp_sn);
+        disconnect(u8a_sn);
         break;
     default:
         break;
     }
 }
 
-static void iod_spi_w5100s_tcp_out() {
-    switch(getSn_SR(u8s_tcp_sn)) { // SOCKET n Status Register
+static void iod_spi_w5100s_tcp_out(uint8_t u8a_sn) {
+    switch(getSn_SR(u8a_sn)) { // SOCKET n Status Register
     case SOCK_ESTABLISHED :
         if (sts_tcp_tx_data.bl_flag) {
-            send(u8s_tcp_sn, sts_tcp_tx_data.au8_buffer, sts_tcp_tx_data.s32_size);
+            send(u8a_sn, sts_tcp_tx_data.au8_buffer, sts_tcp_tx_data.s32_size);
             sts_tcp_tx_data.bl_flag = false;
         }
         break;
@@ -212,16 +210,16 @@ static void iod_spi_w5100s_tcp_out() {
     }
 }
 
-static void iod_spi_w5100s_udp_in() {
+static void iod_spi_w5100s_udp_in(uint8_t u8a_sn) {
     sts_udp_rx_data.bl_flag = false;
 
-    switch(getSn_SR(u8s_udp_sn)) { // SOCKET n Status Register
+    switch(getSn_SR(u8a_sn)) { // SOCKET n Status Register
     case SOCK_CLOSED:
-        u8s_udp_sn = socket(UDP_SN, Sn_MR_UDP, UDP_PORT, 0x00);
+        socket(u8a_sn, Sn_MR_UDP, UDP_PORT, 0x00);
         break;
     case SOCK_UDP :
-        if (getSn_RX_RSR(u8s_udp_sn) > 0) { // SOCKET n RX Received Size Register
-            sts_udp_rx_data.s32_size = recvfrom(u8s_udp_sn, sts_udp_rx_data.au8_buffer, sizeof(sts_udp_rx_data.au8_buffer), au8s_udp_ip, &u16s_udp_port);
+        if (getSn_RX_RSR(u8a_sn) > 0) { // SOCKET n RX Received Size Register
+            sts_udp_rx_data.s32_size = recvfrom(u8a_sn, sts_udp_rx_data.au8_buffer, sizeof(sts_udp_rx_data.au8_buffer), au8s_udp_ip, &u16s_udp_port);
             if (sts_udp_rx_data.s32_size > 0) {
                 sts_udp_rx_data.bl_flag = true;
             }
@@ -232,11 +230,11 @@ static void iod_spi_w5100s_udp_in() {
     }
 }
 
-static void iod_spi_w5100s_udp_out() {
-    switch(getSn_SR(u8s_udp_sn)) { // SOCKET n Status Register
+static void iod_spi_w5100s_udp_out(uint8_t u8a_sn) {
+    switch(getSn_SR(u8a_sn)) { // SOCKET n Status Register
     case SOCK_UDP :
         if (sts_udp_tx_data.bl_flag) {
-            sendto(u8s_udp_sn, sts_udp_tx_data.au8_buffer, sts_udp_tx_data.s32_size, au8s_udp_ip, u16s_udp_port);
+            sendto(u8a_sn, sts_udp_tx_data.au8_buffer, sts_udp_tx_data.s32_size, au8s_udp_ip, u16s_udp_port);
             sts_udp_tx_data.bl_flag = false;
         }
         break;
@@ -263,19 +261,38 @@ static uint32_t iod_spi_w5100s_send(uint8_t *pu8a_buffer, uint32_t u32a_size, st
     return psta_data->s32_size;
 }
 
+static void iod_spi_w5100s_intr_init() {
+    uint16_t u16a_reg_val;
+
+    //u16a_reg_val = SIK_ALL; ///< all interrupt
+    u16a_reg_val = SIK_CONNECTED | SIK_DISCONNECTED | SIK_RECEIVED | SIK_TIMEOUT; // except SendOK
+    ctlsocket(TCP_SN, CS_SET_INTMASK, (void *)&u16a_reg_val);
+    ctlsocket(UDP_SN, CS_SET_INTMASK, (void *)&u16a_reg_val);
+    u16a_reg_val = (1 << TCP_SN) | (1 << UDP_SN);
+    ctlwizchip(CW_SET_INTRMASK, (void *)&u16a_reg_val);
+
+    gpio_set_irq_enabled_with_callback(PIN_INT, GPIO_IRQ_EDGE_FALL, true, iod_spi_w5100s_intr_gpio);
+}
+
 static void iod_spi_w5100s_intr_gpio() {
-    if(getSn_IR(u8s_tcp_sn) & Sn_IR_CON) {
-        setSn_IR(u8s_tcp_sn,Sn_IR_CON);
+    if(getSn_IR(TCP_SN) & Sn_IR_CON) {
+        setSn_IR(TCP_SN,Sn_IR_CON);
         printf("CONNECTED (tcp) Interrupt.\n");
-    } else if (getSn_IR(u8s_tcp_sn) & Sn_IR_RECV) {
-        setSn_IR(u8s_tcp_sn,Sn_IR_RECV);
+    } else if (getSn_IR(TCP_SN) & Sn_IR_RECV) {
+        setSn_IR(TCP_SN,Sn_IR_RECV);
         printf("RECEIVED (tcp) Interrupt.\n");
-    } else if (getSn_IR(u8s_tcp_sn) & Sn_IR_DISCON) {
-        setSn_IR(u8s_tcp_sn,Sn_IR_DISCON);
+//    } else if (getSn_IR(TCP_SN) & Sn_IR_SENDOK) {
+//        setSn_IR(TCP_SN,Sn_IR_SENDOK);
+//        printf("SEND OK (tcp) Interrupt.\n");
+    } else if (getSn_IR(TCP_SN) & Sn_IR_DISCON) {
+        setSn_IR(TCP_SN,Sn_IR_DISCON);
         printf("DISCONNECTED (tcp) Interrupt.\n");
-    } else if (getSn_IR(u8s_udp_sn) & Sn_IR_RECV) {
-        setSn_IR(u8s_udp_sn,Sn_IR_RECV);
+    } else if (getSn_IR(UDP_SN) & Sn_IR_RECV) {
+        setSn_IR(UDP_SN,Sn_IR_RECV);
         printf("RECEIVED (udp) Interrupt.\n");
+//    } else if (getSn_IR(UDP_SN) & Sn_IR_SENDOK) {
+//        setSn_IR(UDP_SN,Sn_IR_SENDOK);
+//        printf("SEND OK (udp) Interrupt.\n");
     } else {
         printf("Other Interrupt.\n");
     }
