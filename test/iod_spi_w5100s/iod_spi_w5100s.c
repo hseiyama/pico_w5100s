@@ -264,6 +264,7 @@ static uint32_t iod_spi_w5100s_send(uint8_t *pu8a_buffer, uint32_t u32a_size, st
 static void iod_spi_w5100s_intr_init() {
     uint16_t u16a_reg_val;
 
+    //【注意】SIK_SENT を含めると送受信が正常に動作しなくなる（原因不明）
     //u16a_reg_val = SIK_ALL; ///< all interrupt
     u16a_reg_val = SIK_CONNECTED | SIK_DISCONNECTED | SIK_RECEIVED | SIK_TIMEOUT; // except SendOK
     ctlsocket(TCP_SN, CS_SET_INTMASK, (void *)&u16a_reg_val);
